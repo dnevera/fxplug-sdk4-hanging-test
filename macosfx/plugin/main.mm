@@ -1,5 +1,6 @@
 #import <FxPlug/FxPlugSDK.h>
 #include <execinfo.h>
+#include <csignal>
 
 static void term_handler(int is)
 {
@@ -17,5 +18,7 @@ static void term_handler(int is)
 
 int main(int argc, const char *argv[])
 {
+  std::signal(SIGTERM, term_handler);
+
   [FxPrincipal startServicePrincipal];
 }
