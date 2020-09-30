@@ -1,0 +1,106 @@
+
+set(PROJECT_APP_TITLE "${PROJECT_APP_TITLE}")
+set(PROJECT_APP_ID "${PROJECT_APP_ID}")
+
+set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+set(PROJECT_APP_RESOURCE
+        ${SOURCE_DIR}/icons/logo.png;
+        ${SOURCE_DIR}/Base.lproj/MainMenu.nib;
+        ${SOURCE_DIR}/en.lproj/InfoPlist.strings;
+        ${SOURCE_DIR}/en.lproj/Credits.rtf;
+        )
+
+file (GLOB SOURCE_FILES ${SOURCE_FILES}
+        ${SOURCE_DIR}/*.mm
+        ${SOURCE_DIR}/*.m
+        )
+
+set(PREP_PACKAGE_PRE_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/packages/scripts/pre.sh)
+set(PREP_PACKAGE_POST_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/packages/scripts/post.sh)
+set(PREP_PACKAGE_UNINSTALL_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/packages/scripts/uninstall.sh)
+
+configure_file(${PREP_PACKAGE_PRE_SCRIPT}.in ${PREP_PACKAGE_PRE_SCRIPT})
+configure_file(${PREP_PACKAGE_POST_SCRIPT}.in ${PREP_PACKAGE_POST_SCRIPT})
+configure_file(${PREP_PACKAGE_UNINSTALL_SCRIPT}.in ${PREP_PACKAGE_UNINSTALL_SCRIPT})
+
+message(STATUS "PREP_PACKAGE_PROJECT_BUNDLE_DATA ${PREP_PACKAGE_PROJECT_BUNDLE_DATA}")
+
+if (APPLE)
+
+    set(MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME})
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER ${PROJECT_APP_ID})
+    set(MACOSX_BUNDLE_INFO_STRING ${PROJECT_APP_TITLE})
+    set(MACOSX_BUNDLE_ICON_FILE "appicon.icns")
+    set(MACOSX_BUNDLE_LONG_VERSION_STRING ${PROJECT_VERSION})
+    set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+    set(MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
+
+    set(RESOURCE_FILES
+            ${SOURCE_DIR}/icons/${MACOSX_BUNDLE_ICON_FILE}
+            ${PROJECT_APP_RESOURCE}
+            )
+
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCE_FILES} ${RESOURCE_FILES})
+
+    target_link_libraries(${PROJECT_NAME}
+            ${COMMON_LIBRARIES}
+            )
+
+    set_target_properties(
+            ${PROJECT_NAME}
+            PROPERTIES
+            MACOSX_BUNDLE_INFO_PLIST ${SOURCE_DIR}/Info.plist.in
+            RESOURCE "${RESOURCE_FILES}"
+    )
+
+    set(WRAPPER_APP_PLUGINS_DIR "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../PlugIns")
+    set(WRAPPER_APP_RESOURCES_DIR "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources")
+    set(APP_NAME ${PROJECT_NAME}${PROJECT_VERSION}${DEHANCER_BUILD_SUFFIX})
+    set(APP_FOLDER "${PROJECT_NAME}.app")
+    message(STATUS "APP_NAME: ${APP_NAME}")
+    message(STATUS "APP_FOLDER: ${APP_FOLDER}")
+    message(STATUS "PROJECT_PLUGIN_PATH: ${PROJECT_PLUGIN_PATH}")
+    message(STATUS "WRAPPER_APP_PLUGINS_DIR: ${WRAPPER_APP_PLUGINS_DIR}")
+
+    add_custom_command(
+                TARGET ${PROJECT_NAME} POST_BUILD
+                DEPENDS ${PROJECT_APP_PLUGIN}
+                COMMAND "${RSYNC_EXECUTABLE}"
+                --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers'
+                ${PROJECT_PLUGIN_PATH}
+                "${WRAPPER_APP_PLUGINS_DIR}"
+                COMMENT "Running ${RSYNC_EXECUTABLE} Pligins..."
+        )
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            DEPENDS ${PROJECT_APP_PLUGIN}
+            COMMAND "${RSYNC_EXECUTABLE}"
+            --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers'
+            ${CMAKE_CURRENT_SOURCE_DIR}/Resources/${FXPLUGIN_NAMESPACE}
+            "${WRAPPER_APP_RESOURCES_DIR}"
+            COMMENT "Running ${RSYNC_EXECUTABLE} Pligins..."
+    )
+
+    if (DEVELOPER_ID_CERT)
+        add_custom_command(
+                TARGET ${PROJECT_NAME} POST_BUILD
+                DEPENDS ${PROJECT_APP_PLUGIN}
+                COMMAND "${CODESIGN_TOOL}" --deep --force --options runtime --timestamp --verify --verbose --sign "${DEVELOPER_ID_CERT}"  ${APP_FOLDER}
+                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                VERBATIM
+                COMMENT "Running ${CODESIGN_TOOL}..."
+        )
+    endif ()
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            DEPENDS ${PROJECT_APP_PLUGIN}
+            COMMAND "${COMPRESS_EXECUTABLE}" -c -k --keepParent ${APP_FOLDER} ${PLUGIN_BUNDLE_DATA}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+            VERBATIM
+            COMMENT "Running ${COMPRESS_EXECUTABLE}..."
+    )
+endif()
+

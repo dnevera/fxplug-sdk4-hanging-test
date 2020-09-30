@@ -1,0 +1,161 @@
+set(RESOURCE_DIR  ${CMAKE_SOURCE_DIR}/Resources)
+set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+file (GLOB PROJECT_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/Resources
+        ${RESOURCE_DIR}/*.png
+        )
+
+set(PROJECT_APP_RESOURCE en.lproj/InfoPlist.strings)
+
+set(PROJECT_APP_EMBED_FRAMEWORKS_DIR /Library/Developer/Frameworks/)
+
+set(PROJECT_APP_EMBED_FRAMEWORKS
+        FxPlug.framework;
+        PluginManager.framework;
+        )
+
+file (GLOB SOURCE_FILES ${SOURCE_FILES}
+        ./*.m
+        ./*.mm
+        ./*.cpp
+        )
+
+if (APPLE)
+
+    set(CMAKE_FIND_FRAMEWORK LAST)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ObjC++ -fvisibility=hidden -Wno-unused-command-line-argument")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden -Wno-unused-command-line-argument")
+
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -F /Library/Developer/Frameworks -framework FxPlug")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -F /Library/Developer/Frameworks -framework FxPlug")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework PluginManager")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework Metal")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework MetalKit")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework MetalPerformanceShaders")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework CoreImage")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -framework Accelerate")
+
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+    set(MACOSX_BUNDLE_BUNDLE_NAME          ${PROJECT_NAME})
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER       ${PROJECT_APP_ID})
+    set(MACOSX_BUNDLE_INFO_STRING          ${PROJECT_APP_TITLE})
+    set(MACOSX_BUNDLE_LONG_VERSION_STRING  ${PROJECT_VERSION})
+    set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+    set(MACOSX_BUNDLE_BUNDLE_VERSION       ${PROJECT_VERSION})
+    set(CMAKE_MACOSX_RPATH TRUE)
+    set(INFO_PLIST  ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in)
+
+    set(RESOURCE_FILES
+            ${SOURCE_DIR}/icons/${MACOSX_BUNDLE_ICON_FILE}
+            ${PROJECT_APP_RESOURCE}
+            )
+
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${SOURCE_FILES} ${RESOURCE_FILES})
+
+    add_dependencies(${CURRENT_TARGET_NAME}
+            MetalDefaultLib
+            ${COMMON_DEPENDECIES}
+            )
+
+    target_link_libraries(${PROJECT_NAME}
+            ${COMMON_LIBRARIES}
+            )
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES BUNDLE TRUE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES BUNDLE_EXTENSION "pluginkit")
+    set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
+    set_target_properties(${PROJECT_NAME} PROPERTIES ENABLE_EXPORTS TRUE)
+
+    set_target_properties(
+            ${PROJECT_NAME}
+            PROPERTIES
+            MACOSX_BUNDLE_INFO_PLIST ${INFO_PLIST}
+            RESOURCE "${RESOURCE_FILES}"
+    )
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES INSTALL_RPATH “@loader_path/../Frameworks”)
+    set_target_properties(${PROJECT_NAME} PROPERTIES FRAMEWORK TRUE)
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            DEPENDS ${INFO_PLIST} ${RESOURCE_FILES} ${PROJECT_APP_RESOURCE} ${COMMON_DEPENDECIES}
+            COMMAND rm -rf "${PROJECT_APP_WRAPPER_PATH}/Contents/MacOS/*"
+            COMMENT "Running clearing Plugins ${PROJECT_APP_WRAPPER_PATH}/Contents/MacOS/* ... "
+    )
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND mkdir -p "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Frameworks"
+            COMMENT "Running mkdir Frameworks..."
+    )
+
+    foreach(FRMWRK ${PROJECT_APP_EMBED_FRAMEWORKS})
+        if (FRMWRK)
+            message(STATUS "FRMWRK ${FRMWRK}")
+            add_custom_command(
+                    TARGET ${PROJECT_NAME} POST_BUILD
+                    DEPENDS  ${INFO_PLIST}
+                    COMMAND "${RSYNC_EXECUTABLE}"
+                    --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' ${PROJECT_APP_EMBED_FRAMEWORKS_DIR}${FRMWRK}
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Frameworks/"
+                    COMMENT "Running ${RSYNC_EXECUTABLE} Embed FxPlug Frameworks..."
+            )
+        endif ()
+        if (DEVELOPER_ID_CERT)
+            add_custom_command(
+                    TARGET ${PROJECT_NAME} POST_BUILD
+                    DEPENDS ${PROJECT_APP_PLUGIN}
+                    COMMAND "${CODESIGN_TOOL}" --force --timestamp --options runtime --sign "${DEVELOPER_ID_CERT}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Frameworks/${FRMWRK}"
+                    VERBATIM
+                    COMMENT "Running ${CODESIGN_TOOL}..."
+            )
+        endif ()
+    endforeach()
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            DEPENDS  ${INFO_PLIST} ${RESOURCE_FILES}
+            COMMAND "${RSYNC_EXECUTABLE}"
+            --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers' "/Library/Developer/Frameworks/PluginManager.framework/"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Frameworks/PluginManager.framework/"
+            COMMENT "Running ${RSYNC_EXECUTABLE} Embed PluginManager Frameworks..."
+    )
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            DEPENDS ${INFO_PLIST} ${RESOURCE_FILES}
+            COMMAND "${RSYNC_EXECUTABLE}"
+            --archive --links --whole-file --no-owner --no-group --checksum --exclude='Headers'
+            "${CMAKE_BINARY_DIR}/macosfx/shaders/${CURRENT_METAL_TARGET_LIB}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources/default.metallib"
+            COMMENT "Running ${RSYNC_EXECUTABLE} Metal lib..."
+    )
+
+    if(PROJECT_RESOURCES)
+        add_custom_command(
+                TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy
+                ${PROJECT_RESOURCES}
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources/"
+        )
+    endif()
+
+    add_custom_command(TARGET  ${PROJECT_NAME} POST_BUILD
+            COMMAND  ${CMAKE_INSTALL_NAME_TOOL}
+            -add_rpath  "@loader_path/../Frameworks" "$<TARGET_FILE:${PROJECT_NAME}>"
+            COMMENT "Running ${CMAKE_INSTALL_NAME_TOOL}..."
+            )
+
+    if (DEVELOPER_ID_CERT)
+        add_custom_command(
+                TARGET ${PROJECT_NAME} POST_BUILD
+                DEPENDS ${PROJECT_APP_PLUGIN}
+                COMMAND "${CODESIGN_TOOL}" --deep --force --options runtime --timestamp --verify --verbose --sign "${DEVELOPER_ID_CERT}"  "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../../"
+                WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+                VERBATIM
+                COMMENT "Running ${CODESIGN_TOOL}..."
+        )
+    endif ()
+
+endif()

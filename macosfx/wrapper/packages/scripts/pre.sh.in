@@ -1,0 +1,8 @@
+#!/bin/sh
+
+
+/bin/mkdir -p "@PLUGIN_FX_ROOT@"
+pluginkit -r `pluginkit -avmD |grep "@FXPLUGIN_ID@"| awk '{print $6}'`
+pluginkit -r "@PLUGIN_BUNDLE_INSTALATION_PATH@/Contents/PlugIns/@PROJECT_APP@"
+rm -rf "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@.app"
+rm -rf "@PLUGIN_BUNDLE_INSTALATION_PATH@"

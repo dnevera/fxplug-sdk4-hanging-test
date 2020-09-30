@@ -1,0 +1,18 @@
+#!/bin/sh
+
+rm -rf "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@.app"
+unzip "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@" -d "@PLUGIN_FX_ROOT_DATA@"
+rm -rf "@PLUGIN_BUNDLE_INSTALATION_PATH@"
+mv "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@.app" "@APPLICATION_ROOT@"
+rm -rf "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@"
+rm -rf "@PLUGIN_FX_ROOT_DATA@/@PLUGIN_BUNDLE_DATA@.app"
+
+rm -rf "@PLUGIN_FX_ROOT@/@FXPLUGIN_NAMESPACE@"
+cp -R "@PLUGIN_BUNDLE_INSTALATION_PATH@/Contents/Resources/@FXPLUGIN_NAMESPACE@" "@PLUGIN_FX_ROOT@/"
+
+open -j "@PLUGIN_BUNDLE_INSTALATION_PATH@"
+
+pluginkit -rav "@PLUGIN_BUNDLE_INSTALATION_PATH@/Contents/PlugIns/@PLUGIN_NAME@.pluginkit"
+export path=`pluginkit -avmD |grep "@FXPLUGIN_ID@"| awk '{print $6}'` && pluginkit -rav $path --raw && pluginkit -av $path && pluginkit -e use -i "@FXPLUGIN_ID@" --raw && echo $path
+
+pluginkit -avDm|grep dehancer
